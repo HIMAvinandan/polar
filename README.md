@@ -39,3 +39,17 @@ Non-custodial wallet support and hosted payment flows are separate integration m
 See [docs/PRODUCT_CHARTER.md](docs/PRODUCT_CHARTER.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md), [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/SOURCES.md](docs/SOURCES.md).
 
 Ordinal-wide licensing and certification instruments are maintained separately in [Xone](https://github.com/HIMAvinandan/xone/tree/ordinal-licensing-certification). POLAR will consume those common instruments through a venture-specific schedule rather than redefining them.
+
+## Run locally
+
+Requirements: Node.js 20+ and PostgreSQL.
+
+```bash
+npm install
+cp .env.example .env
+# Set DATABASE_URL in .env to your own local PostgreSQL database.
+npm run db:generate
+npm run dev
+```
+
+The current UI is a foundation preview. Polls, accounts, credits, payment adapters and live data are not yet connected. Never put production credentials in the repository.
