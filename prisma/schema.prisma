@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PollStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  OPEN
+  MATURED
+  FINALIZED
+  ARCHIVED
+}
+
+enum CommitmentStatus {
+  DECLARED
+  IN_PROGRESS
+  FULFILLED
+  DISPUTED
+  FAILED
+  CLOSED
+}
+
+enum EvidenceStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+enum CreditEntryType {
+  GRANT
+  PURCHASE
+  ALLOCATION
+  REVERSAL
+  EXPIRY
+  ADJUSTMENT
+}
+
+model User {
+  id          String        @id @default(cuid())
+  email       String        @unique
+  displayName String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  poller      Poller?
+  ballots     Ballot[]
+  creditAccount CreditAccount?
+  submittedEvidence Evidence[] @relation("EvidenceSubmitter")
+  auditEvents AuditEvent[]
+}
+
+model Poller {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  profile   String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  polls     Poll[]
+  commitments PollCommitment[]
+}
+
+model Poll {
+  id          String     @id @default(cuid())
+  pollerId    String
+  title       String
+  description String
+  status      PollStatus @default(DRAFT)
+  opensAt     DateTime?
+  closesAt    DateTime
+  publishedAt DateTime?
+  maturedAt   DateTime?
+  finalizedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  poller      Poller     @relation(fields: [pollerId], references: [id], onDelete: Restrict)
+  options     PollOption[]
+  ballots     Ballot[]
+  commitments PollCommitment[]
+
+  @@index([status, closesAt])
+  @@index([pollerId, createdAt])
+}
+
+model PollOption {
+  id        String   @id @default(cuid())
+  pollId    String
+  label     String
+  position  Int
+  createdAt DateTime @default(now())
+  poll      Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  allocations VoteAllocation[]
+
+  @@unique([pollId, position])
+  @@index([pollId])
+}
+
+model Ballot {
+  id            String   @id @default(cuid())
+  pollId        String
+  participantId String
+  castAt        DateTime @default(now())
+  poll          Poll     @relation(fields: [pollId], references: [id], onDelete: Restrict)
+  participant   User     @relation(fields: [participantId], references: [id], onDelete: Restrict)
+  allocations   VoteAllocation[]
+
+  // Initial model: one ballot per participant per poll. Any later change
+  // must preserve a transparent, versioned correction/replacement trail.
+  @@unique([pollId, participantId])
+  @@index([participantId, castAt])
+}
+
+model VoteAllocation {
+  id           String     @id @default(cuid())
+  ballotId     String
+  optionId     String
+  creditAmount Int
+  ballot       Ballot     @relation(fields: [ballotId], references: [id], onDelete: Cascade)
+  option       PollOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  @@unique([ballotId, optionId])
+  @@index([optionId])
+}
+
+model CreditAccount {
+  id           String             @id @default(cuid())
+  userId       String             @unique
+  createdAt    DateTime           @default(now())
+  user         User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  transactions CreditTransaction[]
+}
+
+model CreditTransaction {
+  id             String          @id @default(cuid())
+  accountId      String
+  entryType      CreditEntryType
+  amount         Int
+  referenceType  String?
+  referenceId    String?
+  idempotencyKey String          @unique
+  note           String?
+  createdAt      DateTime        @default(now())
+  account        CreditAccount   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model PollCommitment {
+  id          String           @id @default(cuid())
+  pollId      String
+  pollerId    String
+  title       String
+  trigger     String
+  action      String
+  deadline    DateTime
+  status      CommitmentStatus @default(DECLARED)
+  declaredAt  DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  poll        Poll             @relation(fields: [pollId], references: [id], onDelete: Restrict)
+  poller      Poller           @relation(fields: [pollerId], references: [id], onDelete: Restrict)
+  evidence    Evidence[]
+
+  @@index([pollId, declaredAt])
+  @@index([status, deadline])
+}
+
+model Evidence {
+  id             String         @id @default(cuid())
+  commitmentId   String
+  submittedById  String
+  description    String
+  sourceUri      String?
+  checksum       String?
+  status         EvidenceStatus @default(SUBMITTED)
+  submittedAt    DateTime       @default(now())
+  reviewedAt     DateTime?
+  commitment     PollCommitment @relation(fields: [commitmentId], references: [id], onDelete: Restrict)
+  submittedBy    User           @relation("EvidenceSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+
+  @@index([commitmentId, submittedAt])
+  @@index([status])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  objectType String
+  objectId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([objectType, objectId, createdAt])
+  @@index([actorId, createdAt])
+}
